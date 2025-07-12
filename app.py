@@ -1,16 +1,13 @@
 from flask import Flask, request, jsonify, render_template, flash, redirect
-from azure.storage.blob import generate_blob_sas, BlobSasPermissions
-import os
-from azure.storage.blob import BlobServiceClient, ContentSettings
+from azure.storage.blob import generate_blob_sas, BlobSasPermissions, BlobServiceClient, ContentSettings
 from dotenv import load_dotenv
-
+from datetime import datetime, timedelta
+import os
 
 app = Flask(__name__)
-
-app.secret_key = os.getenv('SECRET_KEY')
 load_dotenv()
+app.secret_key = os.getenv('SECRET_KEY')
 
-# Load environment variables
 ACCOUNT_NAME = os.getenv("ACCOUNT_NAME")
 CONTAINER_NAME = os.getenv("CONTAINER_NAME")
 SAS_TOKEN = os.getenv("SAS_TOKEN")
@@ -19,35 +16,56 @@ blob_service_client = BlobServiceClient(account_url=BLOB_URL, credential=SAS_TOK
 container_client = blob_service_client.get_container_client(CONTAINER_NAME)
 
 
+@app.route('/api/list-files', methods=['GET'])
+def list_files():
+    prefix = request.args.get('directory', '')
+    blobs = container_client.list_blobs(name_starts_with=prefix)
+    file_list = [
+        {
+            "name": blob.name,
+            "url": generate_blob_sas_url(blob.name)
+        }
+        for blob in blobs if not blob.name.endswith('/')
+    ]
+
+    return jsonify(file_list)
 
 
-
-@app.route('/upload-video', methods=['POST'])
-def upload_video():
-    file = request.files.get('video')
+@app.route('/api/upload', methods=['POST'])
+def upload():
+    file = request.files.get('file')
+    directory = request.form.get('directory', '').strip('/')
     if file and file.filename:
-        blob_name = f"uploads/{file.filename}"  # folder in blob container
+        blob_name = f"{directory}/{file.filename}" if directory else file.filename
         try:
             container_client.upload_blob(
                 name=blob_name,
                 data=file,
                 overwrite=True,
-                content_settings=ContentSettings(content_type='video/mp4')
+                content_settings=ContentSettings(content_type=file.content_type)
             )
-            flash(f"Video '{file.filename}' uploaded successfully to Azure Blob Storage!", "success")
+            return jsonify({"message": "Upload successful", "blob_name": blob_name}), 200
         except Exception as e:
-            flash(f"Failed to upload: {str(e)}", "danger")
-    else:
-        flash("No file selected!", "warning")
-    return redirect('/')
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"error": "No file provided"}), 400
 
 
+@app.route('/api/generate-url', methods=['GET'])
+def generate_url():
+    blob_name = request.args.get('blob_name')
+    if not blob_name:
+        return jsonify({"error": "Missing blob_name"}), 400
+    return jsonify({"url": generate_blob_sas_url(blob_name)})
+
+
+def generate_blob_sas_url(blob_name):
+
+    return f"{BLOB_URL}/{CONTAINER_NAME}/{blob_name}?{SAS_TOKEN}"
 
 
 @app.route('/')
 def index():
-    return render_template('index.html')
-
+    return "React frontend served separately."
 
 
 if __name__ == '__main__':
