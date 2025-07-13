@@ -8,8 +8,12 @@ function FileManager({ currentPath, setPath }) {
     const [refresh, setRefresh] = useState(false);
 
     useEffect(() => {
-        axios.get(`/api/list?path=${currentPath}`,).then(res => {
-            setItems(res.data);
+        axios.get(`/api/list?path=${currentPath}`).then(res => {
+            const withFullPath = res.data.map(item => ({
+                ...item,
+                fullPath: `${currentPath}/${item.name}`.replace(/^\/+/, '')
+            }));
+            setItems(withFullPath);
         });
     }, [currentPath, refresh]);
 
@@ -31,6 +35,7 @@ function FileManager({ currentPath, setPath }) {
                         key={item.name}
                         item={item}
                         onOpenFolder={() => setPath(`${currentPath}/${item.name}`.replace(/^\/+/, ''))}
+                        onDelete={() => setRefresh(!refresh)}
                     />
                 ))}
             </div>

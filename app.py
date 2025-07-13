@@ -51,6 +51,20 @@ def list_folder():
 
     return jsonify(files)
 
+
+@app.route('/api/delete', methods=['POST'])
+def delete_file():
+    blob_name = request.json.get('blob_name')
+    if not blob_name:
+        return jsonify({"error": "Missing blob_name"}), 400
+    try:
+        container_client.delete_blob(blob_name)
+        return jsonify({"message": "File deleted"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
 @app.route('/api/create-folder', methods=['POST'])
 def create_folder():
     folder_path = request.json.get('path', '').strip('/')
